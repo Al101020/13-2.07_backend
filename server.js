@@ -1,13 +1,22 @@
+const fs = require('fs');
 const http = require('http');
 const Koa = require('koa');
 const { koaBody } = require('koa-body');
+const koaStatic = require('koa-static'); // пакет для загрузки статической картинки
+const path = require('path');
+const uuid = require('uuid');
 
 const app = new Koa();
 
 let subscriptions = [];
 
+const public = path.join(__dirname, '/public');
+
+app.use(koaStatic(public)); // до middleware koaBody
+ 
 app.use(koaBody({
   urlencoded: true,
+  multipart: true,
 }));
 
 app.use((ctx, next) => {
@@ -22,6 +31,40 @@ app.use((ctx, next) => {
   ctx.response.set('Access-Control-Allow-Methods', 'DELETE, PUT, PATCH, GET, POST');
 
   ctx.response.status = 204;
+});
+
+app.use((ctx, next) => {
+  if (ctx.request.method !== 'POST' && ctx.request.url !== '/upload') {
+    next();
+
+    return;
+  }
+
+  ctx.response.set('Access-Control-Allow-Origin', '*');
+
+  console.log(ctx.request.files);
+
+  let fileName;
+
+  try{
+    const { file } = ctx.request.files;
+
+    const subfolder = uuid.v4();
+    
+    const uploadFolder = public + '/' + subfolder;
+
+    fs.mkdirSync(uploadFolder);
+    fs.copyFileSync(file.filepath, uploadFolder + '/' + file.originalFilename);
+
+    fileName = '/' + subfolder + '/' + file.originalFilename
+  } catch (error) {
+    ctx.response.status = 500;
+
+    return;
+  }
+
+  
+  ctx.response.body = fileName;  // next();
 });
 
 app.use((ctx, next) => {
